@@ -1,0 +1,111 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HMI Simpang Empat</title><link rel="stylesheet" href="style.css"></head><body>
+<main class="hmi"><div class="card"><canvas id="cv" width="800" height="800"></canvas></div>
+<aside>
+<div class="card"><h3>Status sistem</h3><span id="stat" class="badge"></span>
+<div class="row"><div><div class="sub">Waktu simulasi</div><div class="big" id="time">00:00</div></div><div><div class="sub">Siklus</div><div class="big" id="cyc">0</div></div></div>
+<button class="btn g" id="bs">▶ START</button><button class="btn r" id="bp">■ STOP</button><button class="btn" id="br">↺ RESET</button></div>
+<div class="card"><h3>Fase aktif</h3><div id="ph" class="big" style="font-size:19px"></div><div id="chips"></div></div>
+<div class="card"><h3>Lampu lalu lintas</h3><div class="grid2" id="lamps"></div></div>
+</aside></main>
+<script src="shared.js"></script><script>
+nav('HMI');
+const cv=$('cv'),x=cv.getContext('2d'),W=800,C=400,STOP=312,PI=Math.PI,LA=PI/2*25,RA=PI/2*75,K={N:0,E:1,S:2,W:3},END={S:890,L:830,R:910};
+let cfg=getCfg(),st=getState()||fresh(),veh=[],last=performance.now(),lastSave=0,tok=cfg.token;
+st.routes=st.routes||{S:0,L:0,R:0};
+function fresh(){return{phase:0,rem:getCfg().green,cycle:0,simT:0,passed:{N:0,S:0,E:0,W:0},routes:{S:0,L:0,R:0}}}
+const rr=(g,a,b,w,h,r,f)=>{g.beginPath();g.roundRect(a,b,w,h,r);g.fillStyle=f;g.fill()};
+const tx=(g,s,a,b,sz,f,w='700')=>{g.font=w+' '+sz+'px system-ui,sans-serif';g.fillStyle=f;g.textAlign='center';g.textBaseline='middle';g.fillText(s,a,b)};
+/* ---------- lapisan statis: jalan + 4 bangunan ---------- */
+const bg=document.createElement('canvas');bg.width=bg.height=W;
+(function(){const g=bg.getContext('2d');
+ g.fillStyle='#2b3a30';g.fillRect(0,0,W,W);
+ [[0,0,[0,0,30,0]],[458,0,[0,0,0,30]],[0,458,[0,30,0,0]],[458,458,[30,0,0,0]]].forEach(p=>rr(g,p[0],p[1],342,342,p[2],'#3c424b'));
+ g.fillStyle='#202328';g.fillRect(350,0,100,W);g.fillRect(0,350,W,100);
+ for(let k=0;k<4;k++){g.save();g.translate(C,C);g.rotate(k*PI/2);g.translate(-C,-C);
+  g.fillStyle='#e6c200';for(let y=0;y<340;y+=36)g.fillRect(398,y,4,20);
+  g.fillStyle='#ddd';for(let i=0;i<10;i++)g.fillRect(353+i*9.6,324,6,20);g.fillRect(400,STOP,50,4);g.restore()}
+ // SPPG (barat laut)
+ g.fillStyle='#e8f5e9';g.fillRect(45,125,250,150);g.fillStyle='#2e7d32';g.fillRect(30,90,280,36);
+ rr(g,90,25,160,50,8,'#fff');tx(g,'SPPG',170,50,32,'#1b5e20');tx(g,'Satuan Pelayanan Pemenuhan Gizi',170,108,12,'#fff','600');
+ [[60,145],[230,145]].forEach(p=>rr(g,p[0],p[1],55,45,4,'#81c784'));rr(g,135,205,70,70,4,'#1b5e20');
+ g.fillStyle='#e53935';g.beginPath();g.arc(170,170,13,0,7);g.fill();g.fillStyle='#43a047';g.fillRect(168,152,4,8);
+ // Kopdes Merah Putih (timur laut)
+ g.fillStyle='#fff';g.fillRect(480,125,280,150);
+ for(let i=0;i<14;i++){g.fillStyle=i%2?'#fff':'#d32f2f';g.fillRect(470+i*20,96,20,32)}
+ rr(g,500,22,240,64,8,'#d32f2f');tx(g,'KOPERASI DESA',620,43,22,'#fff');tx(g,'MERAH PUTIH',620,68,22,'#fff');
+ [[495,150],[690,150]].forEach(p=>rr(g,p[0],p[1],55,45,4,'#ef9a9a'));rr(g,590,205,60,70,4,'#b71c1c');
+ // Gedung DPR (barat daya)
+ g.fillStyle='#cfd8dc';g.fillRect(40,610,260,130);g.fillStyle='#fff';for(let i=0;i<9;i++)g.fillRect(52+i*28,610,10,130);
+ g.fillStyle='#eceff1';g.fillRect(30,740,280,14);g.fillStyle='#2e7d32';g.beginPath();g.arc(170,610,75,PI,0);g.fill();
+ rr(g,80,480,180,38,6,'#1c2a3a');tx(g,'GEDUNG DPR',170,499,24,'#fff');
+ // IKN (tenggara)
+ rr(g,458,458,342,342,[30,0,0,0],'#0f2236');
+ [[480,640,34,120],[522,685,28,75],[742,625,38,135],[706,680,28,80]].forEach(r=>{const l=g.createLinearGradient(0,r[1],0,r[1]+r[3]);l.addColorStop(0,'#5ee0ff');l.addColorStop(1,'#144a63');g.fillStyle=l;g.fillRect(...r)});
+ g.fillStyle='#ffc233';g.beginPath();g.moveTo(630,590);
+ [[545,545],[565,575],[528,585],[565,605],[548,628],[615,625],[630,665],[645,625],[712,628],[695,605],[732,585],[695,575],[715,545]].forEach(p=>g.lineTo(p[0],p[1]));g.closePath();g.fill();
+ g.beginPath();g.arc(630,572,10,0,7);g.fill();rr(g,560,675,140,12,6,'#37474f');
+ tx(g,'IKN',630,490,40,'#fff');tx(g,'Ibu Kota Nusantara',630,522,13,'#8fd3ff','600');tx(g,'Istana Garuda',630,705,11,'#ffc233','600');
+})();
+/* ---------- kendaraan: lurus (S), kiri (L), kanan (R) ---------- */
+const TY={car:{l:30,w:16,f:1},bike:{l:18,w:8,f:1.15},bus:{l:58,w:20,f:.8}},CL=['#e53935','#1e88e5','#fdd835','#8e24aa','#fb8c00','#eceff1','#43a047','#00acc1'];
+function add(d,s){const r=Math.random(),k=r<.45?'car':r<.85?'bike':'bus',t=TY[k],q=Math.random();
+ if(veh.some(v=>v.d==d&&Math.abs(v.s-s)<v.l+t.l+14))return;
+ veh.push({d,s,sp:0,k,l:t.l,w:t.w,r:q<.6?'S':q<.8?'L':'R',f:t.f*(.9+Math.random()*.2),c:k=='bus'?'#ff7043':CL[Math.random()*8|0]})}
+function seed(){veh=[];for(let i=0;i<40&&veh.length<Math.min(cfg.count,8);i++)add('NESW'[i%4],40+Math.random()*250)}
+/* posisi di kerangka arah Utara (menuju selatan), lalu diputar sesuai arah asal */
+function pose(v,s){let X,Y,A;
+ if(v.r=='S'||s<350){X=425;Y=s;A=PI/2}
+ else if(v.r=='L'){if(s<350+LA){const t=PI-(s-350)/25;X=450+25*Math.cos(t);Y=350+25*Math.sin(t);A=Math.atan2(-Math.cos(t),Math.sin(t))}else{X=450+s-350-LA;Y=375;A=0}}
+ else{if(s<350+RA){const t=(s-350)/75;X=350+75*Math.cos(t);Y=350+75*Math.sin(t);A=Math.atan2(Math.cos(t),-Math.sin(t))}else{X=350-(s-350-RA);Y=425;A=PI}}
+ const a=K[v.d]*PI/2,c=Math.cos(a),n=Math.sin(a),dx=X-C,dy=Y-C;return[C+dx*c-dy*n,C+dx*n+dy*c,A+a]}
+function drawV(v){const P=pose(v,v.s-v.l/2),l=v.l,w=v.w;
+ x.save();x.translate(P[0],P[1]);x.rotate(P[2]);
+ rr(x,-l/2+2,-w/2+2,l,w,4,'rgba(0,0,0,.35)');rr(x,-l/2,-w/2,l,w,4,v.c);x.fillStyle='rgba(10,20,30,.55)';
+ if(v.k=='bike')x.fillRect(-2,-2,6,4);else{x.fillRect(l*.12,-w/2+2,l*.18,w-4);x.fillRect(-l*.3,-w/2+2,l*.12,w-4)}
+ x.fillStyle=v.sp<5?'#ff1e1e':'#7a1010';x.fillRect(-l/2,-w/2+1,2.5,w-2);
+ x.fillStyle='#fff7b0';x.fillRect(l/2-2,-w/2+1,2,3);x.fillRect(l/2-2,w/2-4,2,3);
+ if(v.r!='S'&&v.s>STOP-110&&v.s<350+(v.r=='L'?LA:RA)&&Math.floor(performance.now()/350)%2){x.fillStyle='#ffa000';const y=v.r=='L'?-w/2-1:w/2-2;x.fillRect(l/2-4,y,4,3);x.fillRect(-l/2,y,4,3)}
+ x.restore()}
+/* ---------- logika lampu & gerak ---------- */
+function tick(dt){st.simT+=dt;const p=st.phase;
+ if(held(p,cfg)){st.rem=DUR(cfg,p);return}
+ if(cfg.mode=='manual'&&p%3==0)st.rem=0;else st.rem-=dt;
+ st.rem=Math.min(st.rem,DUR(cfg,p));
+ if(st.rem<=0){st.phase=(p+1)%12;if(st.phase==0)st.cycle++;st.rem=DUR(cfg,st.phase)}}
+function step(dt){const L=LIGHT(st.phase),vm=25+cfg.speed*20;
+ for(const d of 'NESW'){const ls=veh.filter(v=>v.d==d).sort((a,b)=>b.s-a.s),lg=L[d];
+  ls.forEach((v,i)=>{let lim=1e9;const o=ls[i-1];if(o)lim=o.s-o.l-9-v.s;
+   if(v.s<=STOP+1&&(lg=='r'||(lg=='y'&&STOP-v.s>28)))lim=Math.min(lim,STOP-v.s);
+   let t=lim<1.5?0:Math.min(vm*v.f,lim*1.5);
+   if(v.r!='S'&&v.s>STOP-35&&v.s<350+(v.r=='L'?LA:RA)+12)t=Math.min(t,vm*(v.r=='L'?.45:.55));
+   v.sp+=Math.max(-450*dt,Math.min(70*dt,t-v.sp));
+   const n=v.s+v.sp*dt;v.s=lim<1e8?Math.min(n,v.s+Math.max(lim,0)):n;
+   if(v.s>=C&&!v.c2){v.c2=1;st.passed[d]++;st.routes[v.r]++}})}
+ veh=veh.filter(v=>v.s<END[v.r])}
+function update(){const n=performance.now(),dt=Math.min((n-last)/1000,1);last=n;
+ if(cfg.running)for(let t=dt;t>0;t-=.05){const h=Math.min(.05,t);tick(h);
+  if(veh.length<cfg.count&&Math.random()<h*3)add('NESW'[Math.random()*4|0],0);step(h)}
+ if(n-lastSave>250){save();lastSave=n}}
+function save(){const w={N:0,S:0,E:0,W:0},o={...w};veh.forEach(v=>{o[v.d]++;if(v.s<=STOP+1&&v.sp<8)w[v.d]++});
+ localStorage.setItem(KT,JSON.stringify({...st,wait:w,onroad:o,ts:Date.now()}))}
+/* ---------- gambar lampu & UI ---------- */
+const POLES={N:[466,296,0,-34],S:[334,504,0,34],E:[504,466,40,0],W:[296,334,-40,0]};
+function lamp(d,s,t){const[p,q,ox,oy]=POLES[d],h=ox!=0;x.save();x.translate(p,q);
+ rr(x,h?-22:-8,h?-8:-22,h?44:16,h?16:44,5,'#0b0b0c');
+ 'ryg'.split('').forEach((k,i)=>{const o=(i-1)*13,on=k==s;x.beginPath();x.arc(h?o:0,h?0:o,5,0,7);x.fillStyle=on?COL[k]:'#3a3a3a';x.shadowColor=COL[k];x.shadowBlur=on?14:0;x.fill()});
+ x.shadowBlur=0;x.restore();tx(x,t,p+ox,q+oy,15,COL[s])}
+function ui(){const L=LIGHT(st.phase),r=cfg.running;
+ $('stat').textContent=r?'RUNNING':'STOPPED';$('stat').className='badge '+(r?'ok':'bad');
+ $('time').textContent=fmt(st.simT);$('ph').textContent=PHN(st.phase);$('cyc').textContent=st.cycle;
+ for(const d of 'NESW'){const s=L[d],t=cd(st,cfg,d);$('l'+d).style.color=$('l'+d).style.background=COL[s];$('s'+d).textContent=LBL[s];$('t'+d).textContent=t===null?'MANUAL':Math.ceil(t)+' dtk'}
+ document.querySelectorAll('.chip').forEach((c,i)=>c.classList.toggle('on',i==(st.phase/3|0)))}
+function draw(){x.drawImage(bg,0,0);veh.forEach(drawV);const L=LIGHT(st.phase);
+ for(const d of 'NESW'){const c=cd(st,cfg,d);lamp(d,L[d],c===null?'—':Math.ceil(c))}
+ ui();requestAnimationFrame(draw)}
+function doReset(){st=fresh();seed();cfg=setCfg({running:false,token:Date.now()});tok=cfg.token;save()}
+$('chips').innerHTML=DIRS.map(d=>`<span class="chip">Giliran ${DIRN[d]}</span>`).join('');
+$('lamps').innerHTML=DIRS.map(d=>`<div class="gb"><div class="sub">${DIRN[d]}</div><span class="dot" id="l${d}"></span><b id="s${d}"></b><div class="big" style="font-size:22px" id="t${d}"></div></div>`).join('');
+$('bs').onclick=()=>cfg=setCfg({running:true});$('bp').onclick=()=>cfg=setCfg({running:false});$('br').onclick=doReset;
+addEventListener('storage',e=>{if(e.key!=KS)return;cfg=getCfg();if(cfg.token!=tok){tok=cfg.token;st=fresh();seed()}});
+seed();setInterval(update,40);draw();
+</script></body></html>

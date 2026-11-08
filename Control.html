@@ -1,0 +1,29 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kontrol</title><link rel="stylesheet" href="style.css"></head><body>
+<main><h2>⚙️ Panel kontrol</h2><div class="grid">
+<div class="card"><h3>Waktu lampu dan lalu lintas</h3><div id="fs"></div></div>
+<div class="card"><h3>Simulasi</h3><button id="tg" class="btn"></button><button id="rs" class="btn">↺ Reset simulasi</button><button id="rd" class="btn">Pengaturan default</button>
+<h3 style="margin-top:20px">Mode lampu</h3><button id="ma" class="btn">Otomatis</button><button id="mm" class="btn">Manual</button>
+<div id="man"><h3 style="margin-top:14px">Manual: pilih arah hijau</h3><button id="mN" class="btn">Utara</button><button id="mE" class="btn">Timur</button><button id="mS" class="btn">Selatan</button><button id="mW" class="btn">Barat</button><div class="sub">Perpindahan tetap lewat kuning dan merah semua.</div></div></div>
+<div class="card"><h3>Status langsung</h3><div class="big" id="ph" style="font-size:20px">–</div><div class="grid2" style="margin:12px 0"><div class="gb"><div class="sub">Utara</div><b id="cN">–</b></div><div class="gb"><div class="sub">Timur</div><b id="cE">–</b></div><div class="gb"><div class="sub">Selatan</div><b id="cS">–</b></div><div class="gb"><div class="sub">Barat</div><b id="cW">–</b></div></div><div class="sub">Perubahan langsung diterapkan ke HMI.</div></div>
+</div></main>
+<script src="shared.js"></script><script>
+nav('Kontrol');
+const F=[['green','Durasi lampu hijau',' dtk',3,60],['yellow','Durasi lampu kuning',' dtk',1,10],['red','Durasi merah semua (jeda pengaman)',' dtk',1,10],['speed','Kecepatan kendaraan','',1,10],['count','Jumlah kendaraan (maks.)',' unit',0,40]];
+$('fs').innerHTML=F.map(f=>`<label class="fl">${f[1]}<b id="v${f[0]}"></b><input type="range" id="${f[0]}" min="${f[3]}" max="${f[4]}"></label>`).join('');
+F.forEach(f=>$(f[0]).oninput=e=>{setCfg({[f[0]]:+e.target.value});sync()});
+function sync(){const c=getCfg(),s=getState();
+ F.forEach(f=>{if(document.activeElement!=$(f[0]))$(f[0]).value=c[f[0]];$('v'+f[0]).textContent=c[f[0]]+f[2]});
+ $('tg').textContent=c.running?'■ STOP':'▶ START';$('tg').className='btn '+(c.running?'r':'g');
+ $('ma').classList.toggle('on',c.mode=='auto');$('mm').classList.toggle('on',c.mode=='manual');
+ $('man').style.display=c.mode=='manual'?'block':'none';
+ for(const d of 'NESW')$('m'+d).classList.toggle('on',c.manual==d);
+ if(s&&Date.now()-s.ts<2500){$('ph').textContent=PHN(s.phase);
+  for(const d of 'NESW'){const t=cd(s,c,d),l=LIGHT(s.phase)[d];$('c'+d).style.color=COL[l];$('c'+d).textContent=LBL[l]+' '+(t===null?'(manual)':Math.ceil(t)+' dtk')}}
+ else{$('ph').textContent='HMI belum dibuka';for(const d of 'NESW')$('c'+d).textContent='–'}}
+$('tg').onclick=()=>{setCfg({running:!getCfg().running});sync()};
+$('ma').onclick=()=>{setCfg({mode:'auto'});sync()};$('mm').onclick=()=>{setCfg({mode:'manual'});sync()};
+for(const d of 'NESW')$('m'+d).onclick=()=>{setCfg({manual:d});sync()};
+$('rs').onclick=()=>{localStorage.removeItem(KT);setCfg({running:false,token:Date.now()});sync()};
+$('rd').onclick=()=>{localStorage.removeItem(KT);localStorage.setItem(KS,JSON.stringify({...DEF,token:Date.now()}));sync()};
+addEventListener('storage',sync);setInterval(sync,500);sync();
+</script></body></html>

@@ -1,0 +1,25 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard</title><link rel="stylesheet" href="style.css"></head><body>
+<main><h2>📊 Dashboard monitoring</h2><div class="grid" id="cards"></div>
+<div class="card" style="margin-bottom:14px"><h3>Statistik kendaraan per arah</h3><canvas id="ch" width="900" height="320"></canvas>
+<div class="lg"><span style="color:#30d158">■ Sudah lewat</span><span style="color:#0a84ff">■ Di jalan</span><span style="color:#ff453a">■ Antre</span></div></div>
+<div class="grid" id="dirs"></div></main>
+<script src="shared.js"></script><script>
+nav('Dashboard');
+const sum=o=>Object.values(o).reduce((a,b)=>a+b,0);
+const card=(t,v,s,c)=>`<div class="card"><h3>${t}</h3><div class="big" style="color:${c||'inherit'}">${v}</div><div class="sub">${s||''}</div></div>`;
+function chart(p,o,w){const cv=$('ch'),g=cv.getContext('2d'),W=cv.width,H=cv.height;g.clearRect(0,0,W,H);
+ const S=[[p,'#30d158'],[o,'#0a84ff'],[w,'#ff453a']],mx=Math.max(5,...S.flatMap(k=>Object.values(k[0]))),gw=(W-40)/4;
+ g.font='14px system-ui';g.textAlign='center';g.strokeStyle='#2c323c';g.beginPath();g.moveTo(20,H-40.5);g.lineTo(W-20,H-40.5);g.stroke();
+ [...'NSEW'].forEach((d,i)=>{S.forEach((k,j)=>{const v=k[0][d],h=(H-90)*v/mx,x=20+i*gw+gw/2-57+j*40,y=H-40-h;g.fillStyle=k[1];g.fillRect(x,y,34,h);g.fillStyle='#e8ebf0';g.fillText(v,x+17,y-6)});
+  g.fillStyle='#8b93a1';g.fillText(DIRN[d],20+i*gw+gw/2,H-16)})}
+function render(){const c=getCfg(),s=getState(),live=s&&Date.now()-s.ts<2500,z={N:0,S:0,E:0,W:0},p=s?s.passed:z,o=s?s.onroad:z,w=s?s.wait:z,L=s?LIGHT(s.phase):{N:'r',E:'r',S:'r',W:'r'},R=(s&&s.routes)||{S:0,L:0,R:0};
+ $('cards').innerHTML=card('Status sistem',live?(c.running?'RUNNING':'STOPPED'):'HMI OFFLINE',live?'Mode '+(c.mode=='auto'?'otomatis':'manual'):'Buka halaman HMI',live&&c.running?COL.g:COL.r)
+ +card('Kendaraan lewat',sum(p),'Total melewati persimpangan')
+ +card('Kendaraan di jalan',sum(o),sum(w)+' sedang antre')
+ +card('Total siklus lampu',s?s.cycle:0,'Waktu simulasi '+fmt(s?s.simT:0))
+ +[...'NESW'].map(g=>card('Lampu '+DIRN[g],LBL[L[g]],'',COL[L[g]])).join('')+card('Arah gerak',R.S+' lurus',R.L+' belok kiri · '+R.R+' belok kanan')
+ +card('Durasi lampu (dtk)',`<span style="color:${COL.g}">${c.green}</span> / <span style="color:${COL.y}">${c.yellow}</span> / <span style="color:${COL.r}">${c.red}</span>`,'Hijau / Kuning / Merah semua');
+ $('dirs').innerHTML=[...'NSEW'].map(d=>card('Arah '+DIRN[d],p[d]+' lewat',o[d]+' di jalan · '+w[d]+' antre')).join('');
+ chart(p,o,w)}
+addEventListener('storage',render);setInterval(render,500);render();
+</script></body></html>
